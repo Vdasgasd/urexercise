@@ -28,4 +28,4 @@ RUN mkdir -p /app/data
 
 EXPOSE 3000
 
-CMD ["node", "server/index.js"]
+CMD ["node", "--experimental-sqlite", "server/index.js"]
