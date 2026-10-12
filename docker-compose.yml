@@ -1,0 +1,16 @@
+services:
+  urexercise:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: urexercise
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persists SQLite database file on the host machine
+      - ./data:/app/data
+    environment:
+      - PORT=3000
+      - DATA_DIR=/app/data
+      - NODE_ENV=production

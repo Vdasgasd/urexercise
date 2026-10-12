@@ -1,0 +1,34 @@
+{
+  "name": "urexercise",
+  "version": "1.0.0",
+  "description": "Responsive Exercise To-Do & Static Apnea Stopwatch App",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "dev:server": "PORT=3000 node --watch server/index.js",
+    "dev:client": "vite",
+    "dev": "node server/index.js & vite",
+    "build": "vite build",
+    "start": "node server/index.js"
+  },
+  "keywords": [
+    "exercise",
+    "apnea",
+    "freediving",
+    "stopwatch",
+    "workout"
+  ],
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "lucide-react": "^1.55.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.4"
+  }
+}
