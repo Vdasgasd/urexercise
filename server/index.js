@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { db, initDb } from './db.js';
+import { db, initDb, dbPath, reloadDb } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -332,6 +332,104 @@ app.delete('/api/apnea/history/:id', (req, res) => {
   try {
     db.prepare('DELETE FROM apnea_logs WHERE id = ?').run(req.params.id);
     res.json({ success: true, deletedId: req.params.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- USER SETTINGS (E.G. APNEA PB) ---
+app.get('/api/settings', (req, res) => {
+  try {
+    const rows = db.prepare('SELECT key, value FROM user_settings').all();
+    const settings = {};
+    rows.forEach(r => settings[r.key] = r.value);
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/settings', (req, res) => {
+  try {
+    const { key, value } = req.body;
+    if (!key) return res.status(400).json({ error: 'Key is required' });
+    db.prepare(`
+      INSERT INTO user_settings (key, value)
+      VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(key, String(value));
+    res.json({ success: true, key, value });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- ROUTINES COPY ---
+app.post('/api/routines/copy', (req, res) => {
+  try {
+    const { fromDay, toDay } = req.body;
+    const sourceDay = db.prepare('SELECT * FROM routine_days WHERE day_of_week = ?').get(Number(fromDay));
+    if (!sourceDay) return res.status(404).json({ error: 'Hari sumber tidak ditemukan' });
+
+    let targetDay = db.prepare('SELECT * FROM routine_days WHERE day_of_week = ?').get(Number(toDay));
+    if (!targetDay) {
+      const info = db.prepare('INSERT INTO routine_days (day_of_week, routine_name, notes) VALUES (?, ?, ?)')
+        .run(Number(toDay), sourceDay.routine_name, sourceDay.notes || '');
+      targetDay = { id: info.lastInsertRowid, day_of_week: Number(toDay) };
+    } else {
+      db.prepare('UPDATE routine_days SET routine_name = ?, notes = ? WHERE id = ?')
+        .run(sourceDay.routine_name, sourceDay.notes, targetDay.id);
+    }
+
+    db.prepare('DELETE FROM routine_exercises WHERE routine_day_id = ?').run(targetDay.id);
+    const sourceExercises = db.prepare('SELECT * FROM routine_exercises WHERE routine_day_id = ?').all(sourceDay.id);
+    const insertRE = db.prepare(`
+      INSERT INTO routine_exercises (routine_day_id, exercise_id, order_index, target_sets, target_reps, notes)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    for (const ex of sourceExercises) {
+      insertRE.run(targetDay.id, ex.exercise_id, ex.order_index, ex.target_sets, ex.target_reps, ex.notes);
+    }
+
+    res.json({ success: true, message: `Berhasil menyalin rutinitas.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- DATABASE BACKUP & RESTORE ---
+app.get('/api/backup/download', (req, res) => {
+  try {
+    if (!fs.existsSync(dbPath)) {
+      return res.status(404).json({ error: 'File database tidak ditemukan' });
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const filename = `UrExercise-backup-${today}.sqlite`;
+    res.download(dbPath, filename);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/backup/restore', express.raw({ type: () => true, limit: '50mb' }), (req, res) => {
+  try {
+    if (!req.body || req.body.length === 0) {
+      return res.status(400).json({ error: 'File database kosong atau tidak terbaca' });
+    }
+
+    const header = req.body.subarray(0, 16).toString('utf8');
+    if (!header.startsWith('SQLite format 3')) {
+      return res.status(400).json({ error: 'Format file tidak valid. Pastikan file adalah database SQLite (.sqlite).' });
+    }
+
+    const tempPath = `${dbPath}.restore.tmp`;
+    fs.writeFileSync(tempPath, req.body);
+    fs.copyFileSync(tempPath, dbPath);
+    try { fs.unlinkSync(tempPath); } catch {}
+
+    reloadDb();
+
+    res.json({ success: true, message: 'Database SQLite berhasil dipulihkan!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

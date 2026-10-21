@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, Circle, Trophy, Edit3, ArrowRight, RotateCcw, Calendar, CheckSquare, Sparkles } from 'lucide-react';
+import { CheckCircle2, Circle, Trophy, Edit3, ArrowRight, RotateCcw, Calendar, CheckSquare, Sparkles, Flame, Repeat } from 'lucide-react';
 import { api } from '../utils/api';
 import { sound } from '../utils/audio';
 
@@ -22,10 +22,34 @@ export default function TodayWorkout({ onGoToRoutine, onGoToCalendar }) {
   const [isDoneForDay, setIsDoneForDay] = useState(false);
   const [savingLog, setSavingLog] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [weeklyWorkoutCount, setWeeklyWorkoutCount] = useState(0);
 
   useEffect(() => {
     loadRoutine(selectedDay);
+    loadWeeklyStats();
   }, [selectedDay]);
+
+  const loadWeeklyStats = async () => {
+    try {
+      const history = await api.getHistory();
+      if (history && history.workouts) {
+        // Count workouts in current week
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        const day = startOfWeek.getDay() || 7;
+        startOfWeek.setDate(startOfWeek.getDate() - day + 1);
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const count = history.workouts.filter((w) => {
+          const wDate = new Date(w.date);
+          return wDate >= startOfWeek;
+        }).length;
+        setWeeklyWorkoutCount(count);
+      }
+    } catch (err) {
+      console.warn('Error loading weekly stats:', err);
+    }
+  };
 
   const loadRoutine = async (day) => {
     setLoading(true);
@@ -166,10 +190,20 @@ export default function TodayWorkout({ onGoToRoutine, onGoToCalendar }) {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className="px-2.5 py-0.5 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-800 text-xs font-semibold">
                 {isRealToday ? 'Hari Ini' : 'Jadwal'} • {selectedDayObj?.name}
               </span>
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 text-xs font-medium">
+                <Repeat size={12} className="text-cyan-400" />
+                <span>Otomatis Berulang</span>
+              </span>
+              {weeklyWorkoutCount > 0 && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-950/60 text-amber-400 border border-amber-800/60 text-xs font-semibold">
+                  <Flame size={12} />
+                  <span>{weeklyWorkoutCount} Latihan Minggu Ini</span>
+                </span>
+              )}
               {dayRoutine?.notes && (
                 <span className="text-xs text-slate-400 italic">"{dayRoutine.notes}"</span>
               )}

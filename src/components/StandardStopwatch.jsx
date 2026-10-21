@@ -85,10 +85,34 @@ export default function StandardStopwatch() {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key &&e.key.toLowerCase() == 's') {
+      // Ignore if user is inside an input or textarea
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) return;
+
+      const key = e.key ? e.key.toLowerCase() : '';
+
+      // Spacebar: Start / Pause
+      if (e.code === 'Space' || key === ' ') {
+        e.preventDefault();
+        if (isRunning) {
+          handlePause();
+        } else {
+          handleStart();
+        }
+      }
+
+      // 's': Split / Lap
+      if (key === 's') {
         if (isRunning) {
           e.preventDefault();
           handleSplitLap();
+        }
+      }
+
+      // 'r': Reset
+      if (key === 'r') {
+        if (elapsedTime > 0) {
+          e.preventDefault();
+          handleReset();
         }
       }
     };
@@ -163,10 +187,13 @@ export default function StandardStopwatch() {
           <button
             onClick={handleReset}
             disabled={elapsedTime === 0}
-            className="p-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700 transition"
-            title="Reset Stopwatch"
+            className="p-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700 transition relative flex items-center justify-center gap-1"
+            title="Reset Stopwatch (Shortcut: R)"
           >
-            <RotateCcw size={20} />
+            <RotateCcw size={18} />
+            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[9px] bg-slate-900 border border-slate-700 rounded text-slate-400 font-mono">
+              R
+            </kbd>
           </button>
 
           {/* Start / Pause button */}
@@ -177,9 +204,13 @@ export default function StandardStopwatch() {
                 ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20'
                 : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-cyan-500/25'
             }`}
+            title="Start / Pause (Shortcut: Spasi)"
           >
             {isRunning ? <Pause size={22} /> : <Play size={22} />}
             <span>{isRunning ? 'Pause' : 'Start'}</span>
+            <kbd className="hidden sm:inline-block px-2 py-0.5 text-[10px] bg-black/25 rounded text-slate-900 font-mono font-bold">
+              Space
+            </kbd>
           </button>
 
           {/* Split / Lap button */}
@@ -187,12 +218,13 @@ export default function StandardStopwatch() {
             onClick={handleSplitLap}
             disabled={!isRunning}
             className="flex items-center gap-2 px-5 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-cyan-400 font-bold text-sm border border-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-md"
-            title="Catat Split / Lap"
+            title="Catat Split / Lap (Shortcut: S)"
           >
             <Flag size={18} />
             <span className="hidden sm:inline">Split / Lap</span>
             <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] bg-slate-900 border border-slate-700 rounded text-cyan-300 font-mono">
-            S</kbd>
+              S
+            </kbd>
           </button>
         </div>
       </div>

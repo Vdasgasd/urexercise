@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Check, X, Dumbbell, Calendar, MoveUp, MoveDown, Layers, Search, Save } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, Dumbbell, Calendar, MoveUp, MoveDown, Layers, Search, Save, Copy } from 'lucide-react';
 import { api } from '../utils/api';
 
 const DAYS = [
@@ -123,6 +123,28 @@ export default function RoutineBuilder() {
       alert('Gagal menyimpan jadwal: ' + err.message);
     } finally {
       setIsSavingRoutine(false);
+    }
+  };
+
+  const handleCopyRoutineFromDay = async (fromDayId) => {
+    if (fromDayId === '' || Number(fromDayId) === selectedDay) return;
+    const sourceDay = DAYS.find((d) => d.id === Number(fromDayId));
+    const targetDay = DAYS.find((d) => d.id === selectedDay);
+    if (!confirm(`Salin seluruh latihan dari ${sourceDay?.name} ke ${targetDay?.name}?`)) return;
+
+    try {
+      await api.copyRoutine(Number(fromDayId), selectedDay);
+      const updated = await api.getRoutines();
+      setRoutines(updated);
+      const targetUpdated = updated.find((r) => r.day_of_week === selectedDay);
+      if (targetUpdated) {
+        setRoutineName(targetUpdated.routine_name || '');
+        setRoutineNotes(targetUpdated.notes || '');
+        setDayExercises(targetUpdated.exercises || []);
+      }
+      alert(`Berhasil menyalin rutinitas dari ${sourceDay?.name}!`);
+    } catch (err) {
+      alert('Gagal menyalin jadwal: ' + err.message);
     }
   };
 
@@ -291,7 +313,28 @@ export default function RoutineBuilder() {
                 </span>
                 <h2 className="text-xl font-bold text-white">Grup & Rangkaian Latihan</h2>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Salin dari Hari Lain */}
+                <div className="relative">
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value !== '') {
+                        handleCopyRoutineFromDay(e.target.value);
+                        e.target.value = '';
+                      }
+                    }}
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition cursor-pointer focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="" disabled>📋 Salin dari Hari...</option>
+                    {DAYS.filter((d) => d.id !== selectedDay).map((d) => (
+                      <option key={d.id} value={d.id}>
+                        Salin dari {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <button
                   onClick={() => setShowPickerModal(true)}
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md shadow-cyan-600/20 transition"

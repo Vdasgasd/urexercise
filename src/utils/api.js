@@ -117,4 +117,38 @@ export const api = {
   deleteApneaLog(id) {
     return request(`${BASE_URL}/apnea/history/${id}`, { method: 'DELETE' });
   },
+
+  // Routines Copy
+  copyRoutine(fromDay, toDay) {
+    return request(`${BASE_URL}/routines/copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromDay, toDay }),
+    });
+  },
+
+  // Settings (PB, etc.)
+  getSettings() {
+    return request(`${BASE_URL}/settings`);
+  },
+  updateSetting(key, value) {
+    return request(`${BASE_URL}/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value }),
+    });
+  },
+
+  // Database Backup & Restore
+  getBackupDownloadUrl() {
+    return `${BASE_URL}/backup/download`;
+  },
+  async restoreDatabase(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    return request(`${BASE_URL}/backup/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: arrayBuffer,
+    });
+  },
 };

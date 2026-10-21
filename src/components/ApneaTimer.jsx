@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, SkipForward, Plus, Trash2, Save, Flame, Volume2, Sparkles, Calendar, Maximize2, Minimize2, Settings2 } from 'lucide-react';
+import { Play, Pause, RotateCcw, SkipForward, Plus, Trash2, Save, Flame, Volume2, Sparkles, Calendar, Maximize2, Minimize2, Settings2, Trophy, Smartphone } from 'lucide-react';
 import { api } from '../utils/api';
 import { sound } from '../utils/audio';
 
@@ -16,6 +16,10 @@ export default function ApneaTimer({ onGoToCalendar }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [completedSessionData, setCompletedSessionData] = useState(null);
   const [isSavingLog, setIsSavingLog] = useState(false);
+  const [personalBest, setPersonalBest] = useState(180); // in seconds
+  const [showPbModal, setShowPbModal] = useState(false);
+  const [pbInputMinutes, setPbInputMinutes] = useState('3');
+  const [pbInputSeconds, setPbInputSeconds] = useState('00');
 
   // Table Builder / Progression Customizer Modal
   const [showBuilderModal, setShowBuilderModal] = useState(false);
@@ -32,10 +36,73 @@ export default function ApneaTimer({ onGoToCalendar }) {
   });
 
   const timerRef = useRef(null);
+  const wakeLockRef = useRef(null);
+
+  // Vibration feedback for mobile
+  const triggerVibration = (pattern) => {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(pattern);
+      } catch {}
+    }
+  };
+
+  // Screen Wake Lock API to prevent display from sleeping
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator && !wakeLockRef.current) {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+        wakeLockRef.current.addEventListener('release', () => {
+          wakeLockRef.current = null;
+        });
+      }
+    } catch (err) {
+      console.warn('Wake Lock error:', err);
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    if (wakeLockRef.current) {
+      try {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+      } catch (err) {
+        console.warn('Wake Lock release error:', err);
+      }
+    }
+  };
 
   useEffect(() => {
     loadPresets();
+    loadPersonalBest();
   }, []);
+
+  const loadPersonalBest = async () => {
+    try {
+      const settings = await api.getSettings();
+      if (settings && settings.apnea_pb_seconds) {
+        const secs = Number(settings.apnea_pb_seconds);
+        setPersonalBest(secs);
+        setPbInputMinutes(String(Math.floor(secs / 60)));
+        setPbInputSeconds(String(secs % 60).padStart(2, '0'));
+      }
+    } catch (err) {
+      console.warn('Error loading PB:', err);
+    }
+  };
+
+  const handleSavePersonalBest = async (e) => {
+    e.preventDefault();
+    const totalSecs = (parseInt(pbInputMinutes) || 0) * 60 + (parseInt(pbInputSeconds) || 0);
+    if (totalSecs <= 0) return;
+    try {
+      await api.updateSetting('apnea_pb_seconds', totalSecs);
+      setPersonalBest(totalSecs);
+      setShowPbModal(false);
+    } catch (err) {
+      alert('Gagal menyimpan PB: ' + err.message);
+    }
+  };
 
   const loadPresets = async () => {
     setLoading(true);
@@ -120,15 +187,16 @@ export default function ApneaTimer({ onGoToCalendar }) {
   // Timer tick effect
   useEffect(() => {
     if (isRunning) {
+      requestWakeLock();
       timerRef.current = setInterval(() => {
         setTimeLeft((prev) => {
-          // Play tick audio on last 3, 2, 1 seconds
+          // Play tick audio & haptic vibration on last 3, 2, 1 seconds
           if (prev <= 4 && prev > 1) {
             sound.countdownTick();
+            triggerVibration(70);
           }
 
           if (prev <= 1) {
-            // Transition to next phase
             advancePhase();
             return 0;
           }
@@ -136,9 +204,13 @@ export default function ApneaTimer({ onGoToCalendar }) {
         });
       }, 1000);
     } else {
+      releaseWakeLock();
       clearInterval(timerRef.current);
     }
-    return () => clearInterval(timerRef.current);
+    return () => {
+      clearInterval(timerRef.current);
+      releaseWakeLock();
+    };
   }, [isRunning, currentPhaseIndex, currentSchedule]);
 
   const advancePhase = () => {
@@ -148,17 +220,21 @@ export default function ApneaTimer({ onGoToCalendar }) {
       setCurrentPhaseIndex(nextIdx);
       setTimeLeft(nextPhase.duration);
 
-      // Trigger audio cue
+      // Trigger audio & haptic cue
       if (nextPhase.phase === 'HOLD') {
         sound.holdStart();
+        triggerVibration([250, 100, 250]);
       } else {
         sound.restStart();
+        triggerVibration([150, 80, 150]);
       }
     } else {
       // Finished all rounds!
       clearInterval(timerRef.current);
+      releaseWakeLock();
       setIsRunning(false);
       sound.sessionComplete();
+      triggerVibration([400, 150, 400, 150, 600]);
 
       // Calculate total hold time
       const totalHoldSecs = currentSchedule
@@ -283,7 +359,17 @@ export default function ApneaTimer({ onGoToCalendar }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Personal Best Badge */}
+            <button
+              onClick={() => setShowPbModal(true)}
+              title="Klik untuk ubah Personal Best"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold hover:bg-amber-500/25 transition"
+            >
+              <Trophy size={14} />
+              <span>PB: {formatTime(personalBest)}</span>
+            </button>
+
             <button
               onClick={() => setShowBuilderModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition shadow-md shadow-cyan-600/20"
@@ -682,6 +768,76 @@ export default function ApneaTimer({ onGoToCalendar }) {
                 className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition shadow-md shadow-cyan-600/20"
               >
                 Simpan Sebagai Preset
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* --- MODAL: EDIT PERSONAL BEST (PB) --- */}
+      {showPbModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <form
+            onSubmit={handleSavePersonalBest}
+            className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-400">
+                <Trophy size={18} />
+                <h3 className="font-bold text-white text-base">Atur Personal Best (PB)</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPbModal(false)}
+                className="p-1 rounded bg-slate-800 text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Catatan rekor tahan napas terlama (static breath-hold) lo saat ini:
+            </p>
+
+            <div className="flex items-center justify-center gap-2 my-3">
+              <div className="text-center">
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={pbInputMinutes}
+                  onChange={(e) => setPbInputMinutes(e.target.value)}
+                  className="w-16 p-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-center text-xl font-bold font-mono focus:border-amber-400 focus:outline-none"
+                />
+                <span className="text-[10px] text-slate-500 block mt-1 uppercase">Menit</span>
+              </div>
+              <span className="text-2xl font-bold text-slate-500 mb-4">:</span>
+              <div className="text-center">
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={pbInputSeconds}
+                  onChange={(e) => setPbInputSeconds(e.target.value)}
+                  className="w-16 p-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-center text-xl font-bold font-mono focus:border-amber-400 focus:outline-none"
+                />
+                <span className="text-[10px] text-slate-500 block mt-1 uppercase">Detik</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowPbModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 transition"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition shadow-md shadow-amber-500/20"
+              >
+                Simpan PB
               </button>
             </div>
           </form>

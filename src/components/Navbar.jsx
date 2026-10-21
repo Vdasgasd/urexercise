@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Dumbbell, Calendar, Flame, Timer, Volume2, VolumeX, Moon, Sun, ListCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Dumbbell, Calendar, Flame, Timer, Volume2, VolumeX, Moon, Sun, ListCheck, Database, Download, Upload, X, CheckCircle2 } from 'lucide-react';
 import { sound } from '../utils/audio';
+import { api } from '../utils/api';
 
 export default function Navbar({ activeTab, setActiveTab, darkMode, setDarkMode }) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [soundEnabled, setSoundEnabled] = useState(sound.enabled);
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreMessage, setRestoreMessage] = useState('');
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -66,8 +71,16 @@ export default function Navbar({ activeTab, setActiveTab, darkMode, setDarkMode 
             </div>
           </div>
 
-          {/* Quick Controls: Audio & Theme */}
+          {/* Quick Controls: Audio, Theme & Backup */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowBackupModal(true)}
+              title="Backup & Restore SQLite Database"
+              className="p-2 rounded-lg bg-slate-800 text-cyan-400 border border-slate-700 hover:bg-slate-700 transition"
+            >
+              <Database size={18} />
+            </button>
+
             <button
               onClick={toggleSound}
               title={soundEnabled ? 'Mute Suara Bip' : 'Nyalakan Suara Bip'}
@@ -112,6 +125,102 @@ export default function Navbar({ activeTab, setActiveTab, darkMode, setDarkMode 
           })}
         </nav>
       </div>
+
+      {/* Backup & Restore Modal */}
+      {showBackupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl text-left">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-cyan-400">
+                <Database size={20} />
+                <h3 className="font-bold text-white text-base">Backup & Restore SQLite</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowBackupModal(false);
+                  setRestoreMessage('');
+                }}
+                className="p-1 rounded bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Seluruh jadwal latihan, bank latihan, dan riwayat static apnea lo tersimpan di database lokal SQLite.
+            </p>
+
+            <div className="space-y-3 pt-2">
+              {/* Download Backup */}
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <span className="text-xs font-bold text-white block">1. Ekspor & Unduh Backup</span>
+                <p className="text-[11px] text-slate-400">
+                  Unduh salinan file <code className="text-cyan-400">exercise.sqlite</code> ke komputer/HP lo.
+                </p>
+                <a
+                  href={api.getBackupDownloadUrl()}
+                  download
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition shadow-md shadow-cyan-600/20"
+                >
+                  <Download size={14} />
+                  <span>Download Backup Database</span>
+                </a>
+              </div>
+
+              {/* Restore Backup */}
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <span className="text-xs font-bold text-white block">2. Pulihkan / Restore Database</span>
+                <p className="text-[11px] text-slate-400">
+                  Pilih file backup <code className="text-amber-400">.sqlite</code> untuk memulihkan seluruh data.
+                </p>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".sqlite,.db"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (!confirm(`Yakin ingin memulihkan database dari "${file.name}"? Data saat ini akan ditimpa.`)) {
+                      e.target.value = '';
+                      return;
+                    }
+                    setIsRestoring(true);
+                    setRestoreMessage('');
+                    try {
+                      await api.restoreDatabase(file);
+                      setRestoreMessage('Database berhasil dipulihkan! Halaman akan dimuat ulang...');
+                      setTimeout(() => {
+                        window.location.reload();
+                      }, 1200);
+                    } catch (err) {
+                      alert('Gagal restore: ' + err.message);
+                    } finally {
+                      setIsRestoring(false);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={isRestoring}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition"
+                >
+                  <Upload size={14} />
+                  <span>{isRestoring ? 'Memulihkan Data...' : 'Pilih File .sqlite untuk Restore'}</span>
+                </button>
+                {restoreMessage && (
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 pt-1 font-semibold">
+                    <CheckCircle2 size={14} />
+                    <span>{restoreMessage}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

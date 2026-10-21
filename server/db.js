@@ -7,15 +7,50 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const dbPath = path.join(dataDir, 'exercise.sqlite');
-const db = new DatabaseSync(dbPath);
+export const dbPath = path.join(dataDir, 'exercise.sqlite');
 
-// Enable WAL mode & foreign keys
-db.exec('PRAGMA journal_mode = WAL;');
-db.exec('PRAGMA foreign_keys = ON;');
+let currentDb = null;
+
+export function getDb() {
+  if (!currentDb) {
+    currentDb = new DatabaseSync(dbPath);
+    currentDb.exec('PRAGMA journal_mode = WAL;');
+    currentDb.exec('PRAGMA foreign_keys = ON;');
+  }
+  return currentDb;
+}
+
+export function reloadDb() {
+  if (currentDb) {
+    try {
+      currentDb.close();
+    } catch (e) {
+      console.warn('Error closing db before reload:', e);
+    }
+  }
+  currentDb = new DatabaseSync(dbPath);
+  currentDb.exec('PRAGMA journal_mode = WAL;');
+  currentDb.exec('PRAGMA foreign_keys = ON;');
+  initDb();
+  return currentDb;
+}
+
+// Proxy export so db.prepare(...) works transparently
+export const db = new Proxy({}, {
+  get(target, prop) {
+    const active = getDb();
+    const val = active[prop];
+    if (typeof val === 'function') {
+      return val.bind(active);
+    }
+    return val;
+  }
+});
 
 export function initDb() {
-  db.exec(`
+  const activeDb = getDb();
+
+  activeDb.exec(`
     CREATE TABLE IF NOT EXISTS exercises (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -74,10 +109,21 @@ export function initDb() {
       total_hold_seconds INTEGER,
       details_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
   `);
 
+  // Default Personal Best (PB) setting if not set
+  const pbSetting = activeDb.prepare('SELECT value FROM user_settings WHERE key = ?').get('apnea_pb_seconds');
+  if (!pbSetting) {
+    activeDb.prepare('INSERT INTO user_settings (key, value) VALUES (?, ?)').run('apnea_pb_seconds', '180');
+  }
+
   // Seed default days of the week if not present
-  const countDays = db.prepare('SELECT COUNT(*) as count FROM routine_days').get();
+  const countDays = activeDb.prepare('SELECT COUNT(*) as count FROM routine_days').get();
   if (countDays.count === 0) {
     const dayNames = [
       { day: 0, name: 'Rest & Recovery' }, // Minggu
@@ -89,14 +135,14 @@ export function initDb() {
       { day: 6, name: 'Free Movement / Outdoor' } // Sabtu
     ];
 
-    const insertDay = db.prepare('INSERT INTO routine_days (day_of_week, routine_name) VALUES (?, ?)');
+    const insertDay = activeDb.prepare('INSERT INTO routine_days (day_of_week, routine_name) VALUES (?, ?)');
     for (const d of dayNames) {
       insertDay.run(d.day, d.name);
     }
   }
 
   // Seed starter exercises if empty
-  const countEx = db.prepare('SELECT COUNT(*) as count FROM exercises').get();
+  const countEx = activeDb.prepare('SELECT COUNT(*) as count FROM exercises').get();
   if (countEx.count === 0) {
     const sampleExercises = [
       { name: 'Push Up', category: 'Chest', sets: 4, reps: '15-20', notes: 'Tempo 2-1-2' },
@@ -107,41 +153,41 @@ export function initDb() {
       { name: 'Dumbbell Row', category: 'Back', sets: 3, reps: '12', notes: 'Squeeze back' }
     ];
 
-    const insertEx = db.prepare('INSERT INTO exercises (name, category, target_sets, target_reps, notes) VALUES (?, ?, ?, ?, ?)');
+    const insertEx = activeDb.prepare('INSERT INTO exercises (name, category, target_sets, target_reps, notes) VALUES (?, ?, ?, ?, ?)');
     for (const ex of sampleExercises) {
       insertEx.run(ex.name, ex.category, ex.sets, ex.reps, ex.notes);
     }
 
     // Attach sample exercises to Monday (day 1) and Tuesday (day 2)
-    const monday = db.prepare('SELECT id FROM routine_days WHERE day_of_week = 1').get();
+    const monday = activeDb.prepare('SELECT id FROM routine_days WHERE day_of_week = 1').get();
     if (monday) {
-      const attach = db.prepare('INSERT INTO routine_exercises (routine_day_id, exercise_id, order_index, target_sets, target_reps) VALUES (?, ?, ?, ?, ?)');
+      const attach = activeDb.prepare('INSERT INTO routine_exercises (routine_day_id, exercise_id, order_index, target_sets, target_reps) VALUES (?, ?, ?, ?, ?)');
       attach.run(monday.id, 1, 0, 4, '15-20'); // Push up
       attach.run(monday.id, 2, 1, 4, '8-10'); // Pull up
       attach.run(monday.id, 5, 2, 3, '12'); // Dips
     }
 
-    const tuesday = db.prepare('SELECT id FROM routine_days WHERE day_of_week = 2').get();
+    const tuesday = activeDb.prepare('SELECT id FROM routine_days WHERE day_of_week = 2').get();
     if (tuesday) {
-      const attach = db.prepare('INSERT INTO routine_exercises (routine_day_id, exercise_id, order_index, target_sets, target_reps) VALUES (?, ?, ?, ?, ?)');
+      const attach = activeDb.prepare('INSERT INTO routine_exercises (routine_day_id, exercise_id, order_index, target_sets, target_reps) VALUES (?, ?, ?, ?, ?)');
       attach.run(tuesday.id, 3, 0, 4, '20'); // Squats
       attach.run(tuesday.id, 4, 1, 3, '60s'); // Plank
     }
   }
 
   // Seed starter Apnea Presets if empty
-  const countApnea = db.prepare('SELECT COUNT(*) as count FROM apnea_presets').get();
+  const countApnea = activeDb.prepare('SELECT COUNT(*) as count FROM apnea_presets').get();
   if (countApnea.count === 0) {
-    const insertApnea = db.prepare('INSERT INTO apnea_presets (name, type, rounds, config_json) VALUES (?, ?, ?, ?)');
+    const insertApnea = activeDb.prepare('INSERT INTO apnea_presets (name, type, rounds, config_json) VALUES (?, ?, ?, ?)');
 
-    // CO2 Table (Standard: Hold stays 1m30s or 2m00s, Rest starts at 2m00s and decreases by 15s)
+    // CO2 Table (Standard: Hold stays 2m00s constant, Rest starts at 2m00s and decreases by 15s)
     const co2Config = {
       rounds: 8,
-      prepSeconds: 120, // Initial breath-up
-      baseHoldSeconds: 120, // 2m00s hold constant
+      prepSeconds: 120,
+      baseHoldSeconds: 120,
       holdStepSeconds: 0,
-      baseRestSeconds: 120, // Rest starts at 2m00s
-      restStepSeconds: -15, // Decreases by 15s each round
+      baseRestSeconds: 120,
+      restStepSeconds: -15,
       minRestSeconds: 15
     };
     insertApnea.run('CO2 Table (Classic 8-Rounds)', 'co2', 8, JSON.stringify(co2Config));
@@ -150,14 +196,12 @@ export function initDb() {
     const o2Config = {
       rounds: 8,
       prepSeconds: 120,
-      baseHoldSeconds: 75, // Starts 1m15s
-      holdStepSeconds: 15, // Increases 15s each round
-      baseRestSeconds: 120, // Rest constant 2m00s
+      baseHoldSeconds: 75,
+      holdStepSeconds: 15,
+      baseRestSeconds: 120,
       restStepSeconds: 0,
       minRestSeconds: 60
     };
     insertApnea.run('O2 Table (Progression 8-Rounds)', 'o2', 8, JSON.stringify(o2Config));
   }
 }
-
-export { db };
