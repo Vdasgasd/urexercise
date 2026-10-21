@@ -13,9 +13,23 @@ const DAYS = [
   { id: 0, name: 'Minggu', short: 'Min' },
 ];
 
+function getDateForDayOfWeek(targetDay, refDate = new Date()) {
+  const currentDay = refDate.getDay(); // 0: Min, 1: Sen, ..., 6: Sab
+  const currentIso = currentDay === 0 ? 7 : currentDay;
+  const targetIso = targetDay === 0 ? 7 : targetDay;
+  const diff = targetIso - currentIso;
+  const d = new Date(refDate);
+  d.setDate(refDate.getDate() + diff);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function TodayWorkout({ onGoToRoutine, onGoToCalendar }) {
   const currentDayOfWeek = new Date().getDay();
   const [selectedDay, setSelectedDay] = useState(currentDayOfWeek);
+  const [workoutDate, setWorkoutDate] = useState(() => getDateForDayOfWeek(currentDayOfWeek));
   const [dayRoutine, setDayRoutine] = useState(null);
   const [loading, setLoading] = useState(true);
   const [completedSets, setCompletedSets] = useState({}); // { [routineExerciseId]: [true, false, ...] }
@@ -25,6 +39,7 @@ export default function TodayWorkout({ onGoToRoutine, onGoToCalendar }) {
   const [weeklyWorkoutCount, setWeeklyWorkoutCount] = useState(0);
 
   useEffect(() => {
+    setWorkoutDate(getDateForDayOfWeek(selectedDay));
     loadRoutine(selectedDay);
     loadWeeklyStats();
   }, [selectedDay]);
@@ -112,7 +127,7 @@ export default function TodayWorkout({ onGoToRoutine, onGoToCalendar }) {
     if (savingLog) return;
     setSavingLog(true);
     try {
-      const todayDate = new Date().toISOString().slice(0, 10);
+      const logTargetDate = workoutDate || new Date().toISOString().slice(0, 10);
       const summaryDetails = dayRoutine.exercises.map((ex) => ({
         name: ex.name,
         category: ex.category,
@@ -122,7 +137,7 @@ export default function TodayWorkout({ onGoToRoutine, onGoToCalendar }) {
       }));
 
       await api.logWorkout({
-        date: todayDate,
+        date: logTargetDate,
         day_of_week: selectedDay,
         routine_name: dayRoutine.routine_name || 'Latihan Harian',
         notes: `Selesai ${completedExercisesCount}/${totalExercises} latihan`,
@@ -132,6 +147,7 @@ export default function TodayWorkout({ onGoToRoutine, onGoToCalendar }) {
       sound.sessionComplete();
       setShowCelebration(true);
       setIsDoneForDay(true);
+      loadWeeklyStats();
     } catch (err) {
       alert('Gagal menyimpan latihan: ' + err.message);
     } finally {
@@ -160,6 +176,8 @@ export default function TodayWorkout({ onGoToRoutine, onGoToCalendar }) {
           {DAYS.map((d) => {
             const isSelected = selectedDay === d.id;
             const isToday = d.id === currentDayOfWeek;
+            const dayDate = getDateForDayOfWeek(d.id);
+            const dateNum = dayDate ? parseInt(dayDate.split('-')[2]) : '';
             return (
               <button
                 key={d.id}
@@ -170,10 +188,11 @@ export default function TodayWorkout({ onGoToRoutine, onGoToCalendar }) {
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                 }`}
               >
-                <span className="text-xs uppercase tracking-wider">{d.short}</span>
+                <span className="text-[11px] uppercase tracking-wider">{d.short}</span>
+                <span className="text-[11px] font-mono opacity-90">{dateNum}</span>
                 {isToday && (
                   <span
-                    className={`inline-block w-1.5 h-1.5 rounded-full mt-1 ${
+                    className={`inline-block w-1.5 h-1.5 rounded-full mt-0.5 ${
                       isSelected ? 'bg-white' : 'bg-emerald-400'
                     }`}
                   />
@@ -213,7 +232,19 @@ export default function TodayWorkout({ onGoToRoutine, onGoToCalendar }) {
             </h1>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Tanggal yang akan dicatat di kalender */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-xs font-medium shadow-sm">
+              <Calendar size={14} className="text-cyan-400" />
+              <span>Tanggal:</span>
+              <input
+                type="date"
+                value={workoutDate}
+                onChange={(e) => setWorkoutDate(e.target.value)}
+                className="bg-transparent text-cyan-300 font-bold focus:outline-none cursor-pointer"
+              />
+            </div>
+
             <button
               onClick={onGoToRoutine}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition"
@@ -373,7 +404,9 @@ export default function TodayWorkout({ onGoToRoutine, onGoToCalendar }) {
             >
               <Trophy size={18} />
               <span>
-                {savingLog ? 'Menyimpan ke Kalender...' : 'Selesaikan Latihan & Simpan ke Kalender'}
+                {savingLog
+                  ? 'Menyimpan ke Kalender...'
+                  : `Selesaikan Latihan & Simpan ke Kalender (${workoutDate})`}
               </span>
             </button>
           </div>

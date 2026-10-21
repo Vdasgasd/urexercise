@@ -299,7 +299,7 @@ export default function ApneaTimer({ onGoToCalendar }) {
           holdStepSeconds: Number(builderForm.holdStepSeconds) || 0,
           baseRestSeconds: Number(builderForm.baseRestSeconds) || 120,
           restStepSeconds: Number(builderForm.restStepSeconds) || 0,
-          minRestSeconds: Number(builderForm.minRestSeconds) || 15,
+          minRestSeconds: Number(builderForm.minRestSeconds) || 10,
         },
       };
 

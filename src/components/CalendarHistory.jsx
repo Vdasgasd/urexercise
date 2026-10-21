@@ -231,7 +231,12 @@ export default function CalendarHistory() {
                     <div>
                       <h4 className="text-sm font-bold text-white">{w.routine_name}</h4>
                       <span className="text-[11px] text-slate-400">
-                        Selesai pada: {new Date(w.completed_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                        Selesai pada: {new Date(w.completed_at).toLocaleTimeString('id-ID', {
+                          timeZone: 'Asia/Jakarta',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                        })}
                       </span>
                     </div>
                   </div>
