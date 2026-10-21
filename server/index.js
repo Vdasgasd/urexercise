@@ -224,16 +224,18 @@ app.post('/api/history/workout', (req, res) => {
   try {
     const { date, day_of_week, routine_name, notes, details } = req.body;
     const logDate = date || new Date().toISOString().slice(0, 10);
+    const completedAt = new Date().toISOString();
     const stmt = db.prepare(`
-      INSERT INTO workout_logs (date, day_of_week, routine_name, notes, details_json)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO workout_logs (date, day_of_week, routine_name, notes, details_json, completed_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
     const info = stmt.run(
       logDate,
       day_of_week !== undefined ? Number(day_of_week) : null,
       routine_name || 'Completed Workout',
       notes || '',
-      details ? JSON.stringify(details) : null
+      details ? JSON.stringify(details) : null,
+      completedAt
     );
     const created = db.prepare('SELECT * FROM workout_logs WHERE id = ?').get(info.lastInsertRowid);
     res.status(201).json({
@@ -306,9 +308,10 @@ app.post('/api/apnea/history', (req, res) => {
   try {
     const { date, preset_name, type, total_rounds, total_hold_seconds, details } = req.body;
     const logDate = date || new Date().toISOString().slice(0, 10);
+    const completedAt = new Date().toISOString();
     const stmt = db.prepare(`
-      INSERT INTO apnea_logs (date, preset_name, type, total_rounds, total_hold_seconds, details_json)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO apnea_logs (date, preset_name, type, total_rounds, total_hold_seconds, details_json, completed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     const info = stmt.run(
       logDate,
@@ -316,7 +319,8 @@ app.post('/api/apnea/history', (req, res) => {
       type || 'custom',
       Number(total_rounds) || 0,
       Number(total_hold_seconds) || 0,
-      details ? JSON.stringify(details) : null
+      details ? JSON.stringify(details) : null,
+      completedAt
     );
     const created = db.prepare('SELECT * FROM apnea_logs WHERE id = ?').get(info.lastInsertRowid);
     res.status(201).json({

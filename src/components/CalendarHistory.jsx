@@ -7,6 +7,25 @@ const MONTHS_INDO = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
 ];
 
+function formatWIBTime(dateStr) {
+  if (!dateStr) return '';
+  let normalized = dateStr;
+  if (!normalized.includes('T') && !normalized.endsWith('Z')) {
+    normalized = normalized.replace(' ', 'T') + 'Z';
+  } else if (!normalized.endsWith('Z') && !normalized.includes('+')) {
+    normalized = normalized + 'Z';
+  }
+  const d = new Date(normalized);
+  return (
+    d.toLocaleTimeString('id-ID', {
+      timeZone: 'Asia/Jakarta',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }) + ' WIB'
+  );
+}
+
 export default function CalendarHistory() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [history, setHistory] = useState({ workouts: [], apnea: [] });
@@ -231,12 +250,7 @@ export default function CalendarHistory() {
                     <div>
                       <h4 className="text-sm font-bold text-white">{w.routine_name}</h4>
                       <span className="text-[11px] text-slate-400">
-                        Selesai pada: {new Date(w.completed_at).toLocaleTimeString('id-ID', {
-                          timeZone: 'Asia/Jakarta',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: false,
-                        })}
+                        Selesai pada: {formatWIBTime(w.completed_at)}
                       </span>
                     </div>
                   </div>
@@ -280,7 +294,7 @@ export default function CalendarHistory() {
                     <div>
                       <h4 className="text-sm font-bold text-white">{a.preset_name}</h4>
                       <span className="text-[11px] text-slate-400">
-                        {a.type?.toUpperCase()} Table • Selesai: {new Date(a.completed_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                        {a.type?.toUpperCase()} Table • Selesai: {formatWIBTime(a.completed_at)}
                       </span>
                     </div>
                   </div>
