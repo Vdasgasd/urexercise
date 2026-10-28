@@ -1,0 +1,9 @@
+services:
+  apnea-timer:
+    build:
+      context: ./apnea-standalone
+      dockerfile: Dockerfile
+    container_name: apnea-timer
+    restart: unless-stopped
+    ports:
+      - "3000:80"
