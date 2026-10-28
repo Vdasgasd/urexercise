@@ -1,7 +1,9 @@
 services:
   apnea-timer:
-    build: .
+    image: nginx:alpine
     container_name: apnea-timer
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3100:3100"
+      - "127.0.0.1:3100:80"
+    volumes:
+      - ./:/usr/share/nginx/html:ro
