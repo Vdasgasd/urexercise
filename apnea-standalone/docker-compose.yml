@@ -4,4 +4,4 @@ services:
     container_name: apnea-timer
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "3100:80"
